@@ -11,16 +11,13 @@ Here's how they work:
 ### Optargs
 ---
 ```rust
-#[optargs]
+#[optargs::optfn]
 fn example(a: u32, b: Option<&str>) -> bool {
     todo!()
 }
 
-
-
-// now you can use the function as a macro!
-let _ = example!(a: 10, b: "wasd");
-let _ = example!(a: 10);
+// now you can use the function as a macro with optional named arguments
+let _ = example!(a: 10, b: "abc");
 ```
 
 Of note:
