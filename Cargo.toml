@@ -1,0 +1,13 @@
+[package]
+name = "optargs"
+version = "0.1.0"
+authors = ["Jonathan Kelley <jkelleyrtp@gmail.com>"]
+edition = "2018"
+description = "Easily create macros for functions with optional arguments"
+keywords = ["optional", "function", "arguments", "macro", "const"]
+license = "MIT OR Apache-2.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+optargs-macro = { path = "./optargs-macro", version = "0.1.0" }
