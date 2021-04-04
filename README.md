@@ -35,7 +35,7 @@ This crate takes advantage of the recent const_generics in Rust stable (1.51), s
 
 Here's how they work:
 
-### Optargs
+### Optfn
 ---
 ```rust
 #[optargs::optfn]
