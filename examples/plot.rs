@@ -12,5 +12,12 @@ pub fn plot(
 fn main() {
     let x = vec![1, 2, 3];
     let y = vec![1, 2, 3];
-    // plot!(x, y, title: "asdsad", xlabel: "adasdsas", ylabel: "adasdsas");
+
+    // let p = plot!(
+    //     x,
+    //     y,
+    //     title: "asdsad",
+    //     xlabel: "adasdsas",
+    //     ylabel: "adasdsas"
+    // );
 }

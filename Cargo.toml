@@ -11,3 +11,4 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 optargs-macro = { path = "./optargs-macro", version = "0.1.0" }
+mashup = "0.1.12"

@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use syn::{
     parse::{discouraged::Speculative, ParseBuffer},
     GenericArgument, PatType, PathArguments,
@@ -25,11 +27,10 @@ pub struct OptFn {
     required_args: Vec<BuilderField>,
     optional_args: Vec<BuilderField>,
 
-    generics: BuilderConstGeneric,
+    generics: GenericGenerator,
     vis: Visibility,
     name: Ident,
     return_type: ReturnType,
-    // attrs: Vec<Attribute>,
 }
 
 impl Parse for OptFn {
@@ -96,7 +97,7 @@ impl Parse for OptFn {
         }
 
         let generics =
-            BuilderConstGeneric::from_generics(orig.sig.generics.clone(), required_args.len());
+            GenericGenerator::from_generics(orig.sig.generics.clone(), required_args.len());
 
         Ok(Self {
             vis: orig.vis.clone(),
@@ -124,7 +125,6 @@ impl ToTokens for OptFn {
         } = self;
 
         let builder_name = quote! { ExampleBuilder };
-        let impl_generics = quote! {};
 
         let mut fields = quote! {};
         for (name, ty) in optional_args.iter().chain(required_args) {
@@ -133,20 +133,48 @@ impl ToTokens for OptFn {
             })
         }
 
-        let builder_struct = quote! {
+        let impl_generics = generics.gen_all_generic(usize::MAX);
+        let mut builder_struct = quote! {
             #[derive(Default)]
-            #vis struct #builder_name<'__optarg> {
-            // #vis struct #builder_name #impl_generics {
+            #vis struct #builder_name #impl_generics {
                 #fields
-                __optargmarker: ::core::marker::PhantomData<&'__optarg ()>
+                __omarker: ::core::marker::PhantomData<&'_o ()>
+            }
+        };
+
+        let ty_gen = generics.gen_all(false);
+        let mut builder_builder = quote! {
+            impl<'_o> #builder_name #ty_gen {
+                fn builder() -> #builder_name #ty_gen {
+                    #builder_name::default()
+                }
             }
         };
 
         let mut builders = quote! {};
-        for (name, ty) in optional_args.iter().chain(required_args) {
+        for (id, (name, ty)) in required_args.iter().enumerate() {
+            let impl_generics = generics.gen_all_generic(id);
+            let ty_gen_in = generics.gen_positional(id, false);
+            let ty_gen_out = generics.gen_positional(id, true);
             builders.append_all(quote! {
-                impl #builder_name<'_> {
-                    fn #name(mut self, v: #ty) -> Self {
+                impl #impl_generics #builder_name #ty_gen_in {
+                    #vis fn #name(mut self, v: #ty) -> ExampleBuilder #ty_gen_out {
+                        self.#name = Some(v);
+                        // need to bend const generics, and this is the easiest the works with the macro
+                        // todo: destructure and restrcuture, or find another way
+                        // go from Example<false> to Example<true>
+                        unsafe {::core::mem::transmute(self)}
+                    }
+                }
+            })
+        }
+
+        let impl_generics = generics.gen_all_generic(usize::MAX);
+        let ty_gen = generics.gen_positional(usize::MAX, false);
+        for (name, ty) in optional_args {
+            builders.append_all(quote! {
+                impl #impl_generics #builder_name #ty_gen {
+                    #vis fn #name(mut self, v: #ty) -> ExampleBuilder #ty_gen {
                         self.#name = Some(v);
                         self
                     }
@@ -154,27 +182,38 @@ impl ToTokens for OptFn {
             })
         }
 
+        // Generate the fields to unpack the builder to the original function
         let mut callerfields = quote! {};
-        for (name, _ty) in optional_args.iter().chain(required_args) {
+        for (name, _ty) in required_args {
+            // it's okay to unwrap because this method will only exist when all generics are true
+            callerfields.append_all(quote! {
+                self.#name.unwrap(),
+            })
+        }
+        for (name, _ty) in optional_args {
             callerfields.append_all(quote! {
                 self.#name,
             })
         }
 
+        let ty_gen = generics.gen_all(true);
         let caller = quote! {
-            impl #builder_name<'_> {
-                fn build(self) #return_type {
+            impl <'_o> #builder_name #ty_gen {
+                #vis fn build(self) #return_type {
                     #name(#callerfields)
                 }
             }
         };
 
+        // todo - force the number of required arguments
+        // the optional fragment is forwarded to a helper macro_rules
+        // this spits out the appropriate key/value pair depending on the fragment input
         let macro_impl = quote! {
             #[macro_export]
             macro_rules! #name {
-                ($($key:ident: $value:expr), *) => {
-                    ExampleBuilder::default()
-                    $(.$key($value))*
+                ($($key:ident$(: $value:expr)?), * $(,)?) => {
+                    ExampleBuilder::builder()
+                    $(.$key(::optargs::builder_field!($key $(, $value)?)))*
                     .build()
                 };
             }
@@ -183,6 +222,7 @@ impl ToTokens for OptFn {
         let toks = quote! {
             #original
             #builder_struct
+            #builder_builder
             #builders
             #caller
             #macro_impl
@@ -241,20 +281,118 @@ into
         }
     }
 --
-It's important to keep the original generics, and add any lifetimes for fields that start with &'_optargs.
-To do this, we always generate a borrowed lifetime and let the builder automatically add in the '_optargs lifetime
+It's important to keep the original generics, and add any lifetimes for fields that start with &'_os.
+To do this, we always generate a borrowed lifetime and let the builder automatically add in the '_os lifetime
 */
-struct BuilderConstGeneric {
+struct GenericGenerator {
     inner: Generics,
     num_args: usize,
 }
 
-impl BuilderConstGeneric {
+impl GenericGenerator {
     fn from_generics(inner: Generics, num_args: usize) -> Self {
         Self { inner, num_args }
     }
 
-    fn gen_all(&self) {}
+    // generate the generics for an all-generic const
+    // used in the struct position
+    /*
+        pub struct ExampleBuilder<'_o, const M0: bool> {
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^ this bit gets generated
+            a: Option<u32>,
+            b: Option<&'_o str>,
+        }
+    */
+    fn gen_all_generic(&self, exclude: usize) -> TokenStream2 {
+        let mut inner = quote! {};
+        for id in 0..self.num_args {
+            let idref = TokenStream2::from_str(format!("M{}", id).as_str()).unwrap();
+            if id != exclude {
+                inner.append_all(quote! { const #idref: bool, });
+            }
+        }
+        let out = quote! {
+            <'_o, #inner>
+        };
+        // panic!("{:#?}", out);
+        out
+    }
+
+    // generate all the const generics with the same marker
+    /*
+    impl ExampleBuilder<'_o, true, M1> {
+                       ^^^^^^^^^^^^^^^^^^^^ generate this part
+        fn call(self) #ret {
+            #inner(#callerargs)
+        }
+    }
+    */
+    fn gen_all(&self, marker: bool) -> TokenStream2 {
+        let mut inner = quote! {};
+        for _ in 0..self.num_args {
+            inner.append_all(quote! { #marker, });
+        }
+        quote! {
+            <'_o, #inner>
+        }
+    }
+
+    // generate all as generic, except for a single position with the marker
+    /*
+    impl<const A: bool> ExampleBuilder<'_o, false, A> {
+                                      ^^^^^^^^^^^^^^^ gen this
+        fn call(self, val: #ty) -> ExampleBuilder<'_o, true, A> {
+            ...
+        }
+    }
+    */
+    fn gen_positional(&self, position: usize, marker: bool) -> TokenStream2 {
+        //
+        let mut inner = quote! {};
+        for id in 0..self.num_args {
+            if id == position {
+                inner.append_all(quote! { #marker, });
+            } else {
+                let mtok = TokenStream2::from_str(format!("M{}", id).as_str()).unwrap();
+                inner.append_all(quote! { #mtok, });
+            }
+        }
+
+        quote! {
+            <'_o, #inner>
+        }
+    }
+
+    // generate all as generic, except for a single position with the marker
+    /*
+    impl<'_o, const A: bool> ExampleBuilder<'_o, true, true> {
+        ^^^^^^^^^^^^^^^^^^^^^^^^^ gen this
+        fn call(self, val: #ty) -> ExampleBuilder<'_o, true, true> {
+            self.
+        }
+    }
+    */
+    fn gen_positional_impl(&self, position: usize, marker: bool) -> TokenStream2 {
+        //
+        todo!()
+    }
+
+    fn gen_phantom(&self) -> TokenStream2 {
+        todo!()
+    }
+
+    // generate all as generic, except for a single position with the marker
+    /*
+    impl<'_o, const A: bool> ExampleBuilder<'_o, true, true> {
+        fn call(self, val: #ty) #ret {
+            self.
+        }
+    }
+    */
+    fn gen_positional_ret(&self, position: usize, marker: bool) -> TokenStream2 {
+        //
+        todo!()
+    }
 }
 
 /*
