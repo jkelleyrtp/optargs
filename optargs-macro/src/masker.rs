@@ -21,19 +21,22 @@ use syn::{
     Visibility,
 };
 
-pub struct Masker {}
+pub struct Masker {
+    e: Expr,
+}
 impl Parse for Masker {
     fn parse(input: ParseStream) -> Result<Self> {
-        let g = input.parse::<syn::Expr>()?;
-        Ok(Self {})
+        let e = input.parse::<syn::Expr>()?;
+        Ok(Self { e })
     }
 }
 
 impl ToTokens for Masker {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
+        // panic!("{:?}", self.e);
         let toks = quote! {
             (a.unwrap(), b)
         };
-        toks.to_tokens(tokens)
+        self.e.to_tokens(tokens)
     }
 }

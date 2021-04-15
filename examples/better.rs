@@ -3,15 +3,15 @@ use optargs_macro::masker;
 
 macro_rules! example {
     ( $($key:ident: $value:expr), *) => {{
-        let mut a = None;
-        let mut b = None;
-        $(
-            let $key = Some($value);
-        )*
-        let (a_, b_) = masker!{{}};
-        example(a_, b_)
+        // forward the tokens into a helper proc macro
+        // this circumvents hygeneie and lets us abuse idents
+        masker!{
+            { $( let $key = Some($value); )* }
+        }
     }};
 }
+
+enum Blah<const A: bool> {}
 
 fn example(a: i32, title: Option<&str>) -> bool {
     false

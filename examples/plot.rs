@@ -1,12 +1,28 @@
-// #[optargs::optfn]
+#[optargs::optfn]
 pub fn plot(
     x: Vec<i32>,
     y: Option<Vec<i32>>,
-    title: Option<&str>,
-    xlabel: Option<&str>,
-    ylabel: Option<&str>,
+    title: Option<&'static str>,
+    xlabel: Option<&'static str>,
+    ylabel: Option<&'static str>,
+    // kwargs: ...
 ) -> bool {
+    // call_blah!(..kwargs);
+
     false
+}
+
+mod mod1 {
+
+    fn test() {
+        blah!();
+    }
+
+    use crate::__blah_optional as blah;
+    #[macro_export]
+    macro_rules! __blah_optional {
+        () => {};
+    }
 }
 
 fn main() {

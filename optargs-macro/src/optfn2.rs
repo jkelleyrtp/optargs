@@ -123,59 +123,43 @@ impl ToTokens for OptFn2 {
             ..
         } = self;
 
-        let mut basefields = quote! {};
-        for (name, _ty) in required_args {
-            let fname = format!("{}_hidden", name);
-            let varname = syn::Ident::new(&fname, name.span());
-
-            basefields.append_all(quote! {
-                let #varname = None;
-                // let #name = None;
-            })
-        }
-        for (name, _ty) in optional_args {
-            let fname = format!("{}_hidden", name);
-            let varname = syn::Ident::new(&fname, name.span());
-
-            basefields.append_all(quote! {
-                let #varname = None;
-                // let #name = None;
-            })
-        }
-
-        let mut callerfields = quote! {};
-        for (name, _ty) in required_args {
-            callerfields.append_all(quote! {
-                #name.unwrap(),
-            })
-        }
-
-        for (name, _ty) in optional_args {
-            callerfields.append_all(quote! {
-                #name,
-            })
-        }
-
-        // ($($key:ident$(: $value:expr)?), * $(,)?) => {
-        // todo - force the number of required arguments
-        // the optional fragment is forwarded to a helper macro_rules
-        // this spits out the appropriate key/value pair depending on the fragment input
-        let macro_impl = quote! {
-            #[macro_export]
-            macro_rules! #name {
-                ( $($key:ident: $value:expr), *) => {
-                    {
-                        #basefields
-                        $(let $key = Some($value);)*
-                        #name (#callerfields)
-                    }
-                };
-            }
-        };
+        // let hidden_name
 
         let toks = quote! {
             #original
-            #macro_impl
+            // use crate::#name;
+            mod builder {
+                #[doc(hidden)]
+                #[macro_export]
+                macro_rules! #name {
+                    ($($key:ident $(: $value:expr)? ), *) => {
+                        ();
+                        // ExampleBuilder::default()
+                        // $(.$key( some_helper!($key $(, $value)?)  ))*
+                        // .build()
+                    };
+                }
+
+                #[macro_export]
+                macro_rules! some_helper {
+                    ($key:ident, $value:expr) => {
+                        $value
+                    };
+                    ($key:ident) => {
+                        $key
+                    };
+                }
+
+                #[macro_export]
+                macro_rules! specialfield {
+                    ($key:expr, $value:expr) => {
+                        $value
+                    };
+                    ($key:expr) => {
+                        $key
+                    };
+                }
+            }
         };
 
         toks.to_tokens(tokens);
