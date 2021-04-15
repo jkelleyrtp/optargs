@@ -12,18 +12,18 @@ pub fn plot(
     false
 }
 
-mod mod1 {
+// mod mod1 {
 
-    fn test() {
-        blah!();
-    }
+//     fn test() {
+//         blah!();
+//     }
 
-    use crate::__blah_optional as blah;
-    #[macro_export]
-    macro_rules! __blah_optional {
-        () => {};
-    }
-}
+//     use crate::__blah_coptional as blah;
+//     #[macro_export]
+//     macro_rules! __blah_optional {
+//         () => {};
+//     }
+// }
 
 fn main() {
     let x = vec![1, 2, 3];

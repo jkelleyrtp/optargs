@@ -29,6 +29,7 @@ pub struct OptFn {
 
     generics: GenericGenerator,
     vis: Visibility,
+    builder_name: Ident,
     name: Ident,
     return_type: ReturnType,
 }
@@ -99,14 +100,22 @@ impl Parse for OptFn {
         let generics =
             GenericGenerator::from_generics(orig.sig.generics.clone(), required_args.len());
 
+        let name = orig.sig.ident.clone();
+
+        let builder_name = syn::Ident::new(
+            format!("{}_Builder", name.to_string()).as_str(),
+            proc_macro2::Span::call_site(),
+        );
+
         Ok(Self {
             vis: orig.vis.clone(),
             return_type: orig.sig.output.clone(),
-            name: orig.sig.ident.clone(),
             generics,
             original: orig,
             required_args,
             optional_args,
+            builder_name,
+            name,
         })
     }
 }
@@ -121,10 +130,9 @@ impl ToTokens for OptFn {
             return_type,
             name,
             generics,
+            builder_name,
             ..
         } = self;
-
-        let builder_name = quote! { ExampleBuilder };
 
         let mut fields = quote! {};
         for (name, ty) in optional_args.iter().chain(required_args) {
@@ -158,7 +166,7 @@ impl ToTokens for OptFn {
             let ty_gen_out = generics.gen_positional(id, true);
             builders.append_all(quote! {
                 impl #impl_generics #builder_name #ty_gen_in {
-                    #vis fn #name(mut self, v: #ty) -> ExampleBuilder #ty_gen_out {
+                    #vis fn #name(mut self, v: #ty) -> #builder_name #ty_gen_out {
                         self.#name = Some(v);
                         // need to bend const generics, and this is the easiest the works with the macro
                         // todo: destructure and restrcuture, or find another way
@@ -174,7 +182,7 @@ impl ToTokens for OptFn {
         for (name, ty) in optional_args {
             builders.append_all(quote! {
                 impl #impl_generics #builder_name #ty_gen {
-                    #vis fn #name(mut self, v: #ty) -> ExampleBuilder #ty_gen {
+                    #vis fn #name(mut self, v: #ty) -> #builder_name #ty_gen {
                         self.#name = Some(v);
                         self
                     }
@@ -212,7 +220,7 @@ impl ToTokens for OptFn {
             #[macro_export]
             macro_rules! #name {
                 ($($key:ident$(: $value:expr)?), * $(,)?) => {
-                    ExampleBuilder::builder()
+                    #builder_name::builder()
                     $(.$key(::optargs::builder_field!($key $(, $value)?)))*
                     .build()
                 };
