@@ -145,7 +145,7 @@ impl ToTokens for OptFn {
         let ty_gen = generics.gen_all(false);
         let mut builder_builder = quote! {
             impl<'_o> #builder_name #ty_gen {
-                fn builder() -> #builder_name #ty_gen {
+                #vis fn builder() -> #builder_name #ty_gen {
                     #builder_name::default()
                 }
             }
