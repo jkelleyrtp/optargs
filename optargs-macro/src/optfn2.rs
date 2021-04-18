@@ -125,44 +125,55 @@ impl ToTokens for OptFn2 {
 
         // let hidden_name
 
+        let mut inners_body = quote! {}.into_token_stream();
+        for _ in required_args.iter().chain(optional_args.iter()) {
+            inners_body.append_all(quote! {None,});
+        }
+
         let toks = quote! {
             #original
             // use crate::#name;
+
             mod builder {
                 #[doc(hidden)]
                 #[macro_export]
                 macro_rules! #name {
                     ($($key:ident $(: $value:expr)? ), *) => {
-                        ();
+                        let inners = (#inners_body);
+                        #name()
                         // ExampleBuilder::default()
                         // $(.$key( some_helper!($key $(, $value)?)  ))*
                         // .build()
                     };
                 }
 
-                #[macro_export]
-                macro_rules! some_helper {
-                    ($key:ident, $value:expr) => {
-                        $value
-                    };
-                    ($key:ident) => {
-                        $key
-                    };
-                }
+                // #[macro_export]
+                // macro_rules! some_helper {
+                //     ($key:ident, $value:expr) => {
+                //         $value
+                //     };
+                //     ($key:ident) => {
+                //         $key
+                //     };
+                // }
 
-                #[macro_export]
-                macro_rules! specialfield {
-                    ($key:expr, $value:expr) => {
-                        $value
-                    };
-                    ($key:expr) => {
-                        $key
-                    };
-                }
+                // #[macro_export]
+                // macro_rules! specialfield {
+                //     ($key:expr, $value:expr) => {
+                //         $value
+                //     };
+                //     ($key:expr) => {
+                //         $key
+                //     };
+                // }
             }
         };
 
         toks.to_tokens(tokens);
+        let text = toks.to_string();
+        tokens.append_all(quote! {
+            const blah: &'static str = #text;
+        })
     }
 }
 

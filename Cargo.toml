@@ -12,3 +12,10 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 optargs-macro = { path = "./optargs-macro", version = "0.1.0" }
 mashup = "0.1.12"
+
+[profile.dev]
+debug = 0
+
+[profile.release]
+incremental = true
+debug = 0 # Set this to 1 or 2 to get more useful backtraces in debugger.
