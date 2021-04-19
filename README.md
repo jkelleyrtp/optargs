@@ -62,3 +62,30 @@ Of note:
 
 ## How it works:
 OptArgs uses const generics to ensure compile-time correctness. I've taken the liberty of expanding and humanizing the macros in the reference examples. 
+
+In essence, we encode the state of required parameters into a ZST with const parameters. When each required parameter is added, we flip the const parameter from false to true. Only when all the required parameters are entered, then can we proceed with calling the original function.
+
+```rust
+struct Validator<const A: bool> {}
+impl Validator<true> { fn validate(self) {} }
+impl<const A: bool> Validator<A> { fn b(self) -> Validator<A> { self }}
+// Not to worry about the unsafe, Validator is a ZST and has no place in memory.
+// All this validation code will be removed anyways.
+impl Validator<false> { fn a(self) -> Validator<true> { unsafe {std::mem::transmute(self)} } }
+```
+
+
+## License
+
+Licensed under either of
+
+ * Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any
+additional terms or conditions.
