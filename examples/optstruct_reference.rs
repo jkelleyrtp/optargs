@@ -10,6 +10,8 @@ impl Example {
     }
 }
 
+#[doc(hidden)]
+#[macro_export]
 macro_rules! Example {
     ($($key:ident $(: $value:expr)? ), *) => {{
         let mut inners = (None, None);

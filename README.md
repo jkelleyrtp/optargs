@@ -58,6 +58,7 @@ Of note:
 - All optional arguments must come *after* required arguments.
 - Unnamed positional arguments *must* be in the correct position.
 - All arguments *can* be required, but now you get to name them.
+- Traditional macro_rules scoping applies IE you can't use the macro before function declaration. However, they are exported with macro_export, so you can use them anywhere with `crate::$MACRO`. Currently, there's no way to disable this, so you can't have two functions with the same name. If this becomes a problem, we'll gladly accept a PR.
 
 ## How it works:
 OptArgs uses const generics to ensure compile-time correctness. I've taken the liberty of expanding and humanizing the macros in the reference examples. 

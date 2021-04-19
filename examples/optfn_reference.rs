@@ -6,6 +6,7 @@
 fn example(a: i32, b: Option<&str>) {}
 
 /// A rough translation of what opftn generates
+#[doc(hidden)]
 #[macro_export]
 macro_rules! example_src {
     ($($key:ident $(: $value:expr)? ), *) => {
