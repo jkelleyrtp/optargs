@@ -12,7 +12,7 @@ use {
     syn::{
         ext::IdentExt,
         parse::{Parse, ParseStream},
-        token, Error, Expr, ExprClosure, Ident, LitBool, LitStr, Path, Result, Token,
+        token, Error, Expr, ExprClosure, Ident, LitBool, LitInt, LitStr, Path, Result, Token,
     },
 };
 
@@ -26,8 +26,6 @@ pub struct OptFn2 {
     original: ItemFn,
     required_args: Vec<BuilderField>,
     optional_args: Vec<BuilderField>,
-
-    // generics: GenericGenerator,
     vis: Visibility,
     name: Ident,
     return_type: ReturnType,
@@ -40,7 +38,6 @@ impl Parse for OptFn2 {
     - all the fields
     - that all "optional" fields come after required/positional fields
     - the original
-    - any generics (need to be mapped to the builder)
     - fields that are required
     - fields that are optional
     */
@@ -96,14 +93,10 @@ impl Parse for OptFn2 {
             })?;
         }
 
-        // let generics =
-        //     GenericGenerator::from_generics(orig.sig.generics.clone(), required_args.len());
-
         Ok(Self {
             vis: orig.vis.clone(),
             return_type: orig.sig.output.clone(),
             name: orig.sig.ident.clone(),
-            // generics,
             original: orig,
             required_args,
             optional_args,
@@ -123,57 +116,69 @@ impl ToTokens for OptFn2 {
             ..
         } = self;
 
-        // let hidden_name
+        let mut helper_defs = quote! {}.into_token_stream();
+        for (id, (arg, ty)) in required_args.iter().chain(optional_args.iter()).enumerate() {
+            let id = syn::Index::from(id);
+            helper_defs.append_all(quote! {
+                (@setter_helper $src:ident #arg $key:ident) => {
+                    $src.#id = Some($key);
+                };
+                (@setter_helper $src:ident #arg $key:ident $value:expr) => {
+                    $src.#id = Some($value);
+                };
+            })
+        }
 
-        let mut inners_body = quote! {}.into_token_stream();
+        let mut inners_body = TokenStream2::new();
         for _ in required_args.iter().chain(optional_args.iter()) {
             inners_body.append_all(quote! {None,});
         }
 
-        let toks = quote! {
-            #original
-            // use crate::#name;
+        let mut call_body = TokenStream2::new();
+        required_args
+            .iter()
+            .map(|f| (true, f))
+            .chain(optional_args.iter().map(|f| (false, f)))
+            .enumerate()
+            .for_each(|(id, (required, _))| {
+                let id = syn::Index::from(id);
+                match required {
+                    true => call_body.append_all(quote! {inners.#id.unwrap(),}),
+                    false => call_body.append_all(quote! {inners.#id,}),
+                }
+            });
 
-            mod builder {
+        let validator =
+            GenericGenerator::new(required_args.len()).generate(required_args, optional_args);
+
+        ToTokens::to_tokens(
+            &quote! {
+                #original
+
                 #[doc(hidden)]
                 #[macro_export]
                 macro_rules! #name {
                     ($($key:ident $(: $value:expr)? ), *) => {
-                        let inners = (#inners_body);
-                        #name()
-                        // ExampleBuilder::default()
-                        // $(.$key( some_helper!($key $(, $value)?)  ))*
-                        // .build()
+                        {
+                            #[allow(unused_mut)]
+                            let mut inners = (#inners_body);
+                            {
+                                $( #name! (@setter_helper inners $key $key $($value)? ) )*
+                            }
+                            // #validator
+                            //
+                            // #[allow(unused_mut)]
+                            // let mut validator = Validator::builder();
+                            // validator $(.$key())* .build();
+                            #name(#call_body)
+                        }
                     };
+                    #helper_defs
                 }
 
-                // #[macro_export]
-                // macro_rules! some_helper {
-                //     ($key:ident, $value:expr) => {
-                //         $value
-                //     };
-                //     ($key:ident) => {
-                //         $key
-                //     };
-                // }
-
-                // #[macro_export]
-                // macro_rules! specialfield {
-                //     ($key:expr, $value:expr) => {
-                //         $value
-                //     };
-                //     ($key:expr) => {
-                //         $key
-                //     };
-                // }
-            }
-        };
-
-        toks.to_tokens(tokens);
-        let text = toks.to_string();
-        tokens.append_all(quote! {
-            const blah: &'static str = #text;
-        })
+            },
+            tokens,
+        );
     }
 }
 
@@ -205,5 +210,148 @@ fn extract_type_from_option(ty: Box<Type>) -> Result<Box<Type>> {
             }
         }
         _ => panic!("TODO: error handling"),
+    }
+}
+
+/*
+This struct lets us generate the correct const generics form depending on the arguments.
+---
+So we can turn this function:
+
+    fn blah(a: u32, b: Option<u32>){}
+
+into
+
+    impl Builder<false> {
+                ^^^^^^^ -- this gets generated from a method
+        fn a(self) -> Builder<true> {
+                             ^^^^^^ -- this gets generated from a method
+            ...
+        }
+    }
+--
+It's important to keep the original generics, and add any lifetimes for fields that start with &'_os.
+To do this, we always generate a borrowed lifetime and let the builder automatically add in the '_os lifetime
+*/
+struct GenericGenerator {
+    num_args: usize,
+}
+
+impl GenericGenerator {
+    fn new(num_args: usize) -> Self {
+        Self { num_args }
+    }
+
+    // generate the generics for an all-generic const
+    // used in the struct position
+    /*
+        pub struct ExampleBuilder<const M0: bool> {
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^ this bit gets generated
+            a: Option<u32>,
+            b: Option<&'_o str>,
+        }
+    */
+    fn gen_all_generic(&self, exclude: usize) -> TokenStream2 {
+        let mut inner = quote! {};
+        for id in 0..self.num_args {
+            let idref = TokenStream2::from_str(format!("M{}", id).as_str()).unwrap();
+            if id != exclude {
+                inner.append_all(quote! { const #idref: bool, });
+            }
+        }
+        quote! { <#inner> }
+    }
+
+    // generate all the const generics with the same marker
+    /*
+    impl ExampleBuilder<true, M1> {
+                       ^^^^^^^^^^^^^^^^^^^^ generate this part
+        fn call(self) #ret {
+            #inner(#callerargs)
+        }
+    }
+    */
+    fn gen_all(&self, marker: bool) -> TokenStream2 {
+        let mut inner = quote! {};
+        for _ in 0..self.num_args {
+            inner.append_all(quote! { #marker, });
+        }
+        quote! { <#inner> }
+    }
+
+    // generate all as generic, except for a single position with the marker
+    /*
+    impl<const A: bool> ExampleBuilder<false, A> {
+                                      ^^^^^^^^^^^^^^^ gen this
+        fn call(self, val: #ty) -> ExampleBuilder<true, A> {
+            ...
+        }
+    }
+    */
+    fn gen_positional(&self, position: usize, marker: bool) -> TokenStream2 {
+        //
+        let mut inner = quote! {};
+        for id in 0..self.num_args {
+            if id == position {
+                inner.append_all(quote! { #marker, });
+            } else {
+                let mtok = TokenStream2::from_str(format!("M{}", id).as_str()).unwrap();
+                inner.append_all(quote! { #mtok, });
+            }
+        }
+
+        quote! { <#inner> }
+    }
+
+    fn generate(
+        &self,
+        required_args: &Vec<BuilderField>,
+        optional_args: &Vec<BuilderField>,
+    ) -> TokenStream2 {
+        let impl_generics = self.gen_all_generic(usize::MAX);
+        let ty_gen = self.gen_all(false);
+        let builder_builder = quote! {
+            #[derive(Default)]
+            struct Validator #impl_generics;
+            impl Validator #ty_gen {
+                fn builder() -> Validator #ty_gen { Validator::default() }
+            }
+        };
+
+        let mut builders = TokenStream2::new();
+        for (id, (name, ty)) in required_args.iter().enumerate() {
+            let impl_generics = self.gen_all_generic(id);
+            let ty_gen_in = self.gen_positional(id, false);
+            let ty_gen_out = self.gen_positional(id, true);
+            builders.append_all(quote! {
+                impl #impl_generics Validator #ty_gen_in {
+                    fn #name(self) -> Validator #ty_gen_out { unsafe {::core::mem::transmute(self)} }
+                }
+            })
+        }
+
+        let impl_generics = self.gen_all_generic(usize::MAX);
+        let ty_gen = self.gen_positional(usize::MAX, false);
+        for (name, ty) in optional_args {
+            builders.append_all(quote! {
+                impl #impl_generics Validator #ty_gen {
+                    #[allow(unused)]
+                    fn #name(self) -> Validator #ty_gen { self }
+                }
+            })
+        }
+
+        let ty_gen = self.gen_all(true);
+        let caller = quote! {
+            impl Validator #ty_gen {
+                fn build(self) {}
+            }
+        };
+
+        quote! {
+            #builder_builder
+            #builders
+            #caller
+        }
     }
 }
