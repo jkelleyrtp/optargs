@@ -43,7 +43,7 @@ fn main() {
     // order doesn't matter since they're named!
     go_gme!(price: 10.0, tendies: true, doges);
 
-    // this works
+    // this works too!
     let price = 10.0;
     go_gme!(price);
 

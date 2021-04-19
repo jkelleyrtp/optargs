@@ -3,14 +3,12 @@ use quote::ToTokens;
 use syn::parse_macro_input;
 
 mod masker;
-mod optbuilder;
 mod optfn;
-mod optfn2;
 mod optstruct;
 
 #[proc_macro_attribute]
 pub fn optfn(_attr: TokenStream, s: TokenStream) -> TokenStream {
-    match syn::parse::<optfn2::OptFn2>(s) {
+    match syn::parse::<optfn::OptFn>(s) {
         Err(e) => e.to_compile_error().into(),
         Ok(s) => s.to_token_stream().into(),
     }
