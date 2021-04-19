@@ -33,7 +33,7 @@ fn main() {
         to_the_moon: true,
         rocket_ships: 10,
         doges: 7,
-        tendies: true,
+        tendies: true
     );
 
     // pass it from the environment
@@ -48,8 +48,6 @@ fn main() {
     go_gme!(price);
 
     // but this doesn't since we need name for the builder
-    // This will eventually work, but it's currently a limited until positional args are implemented completely
+    // This might eventually work, but it's currently a limited until positional args are implemented completely
     // go_gme!(10.0);
 }
-
-struct Example<const A: bool> {}

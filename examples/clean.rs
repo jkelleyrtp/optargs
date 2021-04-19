@@ -1,4 +1,4 @@
-#[optargs::optfn2]
+#[optargs::optfn]
 fn example(a: i32, b: Option<&str>) -> bool {
     false
 }

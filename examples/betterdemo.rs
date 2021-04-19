@@ -1,6 +1,4 @@
-use optargs::optfn2;
-
-// #[optfn2]
+#[optargs::optfn]
 fn example(a: i32, b: Option<&str>) {}
 
 macro_rules! example_example {
@@ -8,7 +6,7 @@ macro_rules! example_example {
         {
             #[allow(unused_mut)]
             let mut inners = (None, None);
-            { $( example_example!(@setter_helper inners $key $key $($value)? ) )* }
+            { $( example_example!(@setter_helper inners $key $key $($value)? ); )* }
 
             // Validate
             // struct Validator<const A: bool> {}
@@ -42,7 +40,7 @@ macro_rules! example_example {
 
 fn main() {
     // let p = |_| {};
-    // example!(a: 10, b: "asd");
+    example!(a: 10, b: "asd");
 
     // example_example!(a: 10);
     example_example!(b: "asd");

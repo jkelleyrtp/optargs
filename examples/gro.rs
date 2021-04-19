@@ -27,7 +27,7 @@ fn main() {
 
 mod v2 {
 
-    use optargs_macro::optfn2;
+    use optargs_macro::optfn;
 
     // #[optfn2]
     // pub fn plot(

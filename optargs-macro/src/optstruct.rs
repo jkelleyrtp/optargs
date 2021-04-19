@@ -10,7 +10,7 @@ use syn::{
 
 type BuilderField = (Ident, Box<Type>);
 
-pub struct OptFn2 {
+pub struct OptStruct {
     original: ItemFn,
     required_args: Vec<BuilderField>,
     optional_args: Vec<BuilderField>,
@@ -19,7 +19,7 @@ pub struct OptFn2 {
     return_type: ReturnType,
 }
 
-impl Parse for OptFn2 {
+impl Parse for OptStruct {
     /*
 
     We care about:
@@ -90,9 +90,9 @@ impl Parse for OptFn2 {
     }
 }
 
-impl ToTokens for OptFn2 {
+impl ToTokens for OptStruct {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
-        let OptFn2 {
+        let OptStruct {
             original,
             required_args,
             optional_args,
