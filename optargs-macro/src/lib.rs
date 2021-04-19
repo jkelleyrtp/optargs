@@ -1,8 +1,6 @@
 use proc_macro::TokenStream;
 use quote::ToTokens;
-use syn::parse_macro_input;
 
-mod masker;
 mod optfn;
 mod optstruct;
 

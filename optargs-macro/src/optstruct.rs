@@ -2,11 +2,8 @@ use std::str::FromStr;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, ToTokens, TokenStreamExt};
-use syn::{
-    parse::{Parse, ParseStream},
-    DeriveInput, Error, FnArg, GenericArgument, Ident, ItemFn, Path, PathArguments, Result,
-    ReturnType, Type, Visibility,
-};
+use syn::parse::{Parse, ParseStream};
+use syn::{DeriveInput, Error, GenericArgument, Ident, Path, PathArguments, Result, Type};
 
 type BuilderField = (Ident, Box<Type>);
 
@@ -14,8 +11,6 @@ pub struct OptStruct {
     name: Ident,
     required_args: Vec<BuilderField>,
     optional_args: Vec<BuilderField>,
-    // vis: Visibility,
-    // return_type: ReturnType,
 }
 
 impl Parse for OptStruct {
@@ -91,9 +86,6 @@ impl Parse for OptStruct {
 impl ToTokens for OptStruct {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
         let OptStruct {
-            // original,
-            // vis,
-            // return_type,
             required_args,
             optional_args,
             name,
@@ -104,7 +96,7 @@ impl ToTokens for OptStruct {
             .iter()
             .chain(optional_args.iter())
             .enumerate()
-            .map(|(id, (arg, ty))| {
+            .map(|(id, (arg, _ty))| {
                 let id = syn::Index::from(id);
                 quote! {
                     (@setter_helper $src:ident #arg $key:ident) => {
@@ -126,7 +118,7 @@ impl ToTokens for OptStruct {
             .map(|f| (true, f))
             .chain(optional_args.iter().map(|f| (false, f)))
             .enumerate()
-            .map(|(id, (required, (name, ty)))| {
+            .map(|(id, (required, (name, _ty)))| {
                 let id = syn::Index::from(id);
                 match required {
                     true => quote! {
@@ -309,7 +301,7 @@ impl GenericGenerator {
         };
 
         let mut builders = TokenStream2::new();
-        for (id, (name, ty)) in required_args.iter().enumerate() {
+        for (id, (name, _ty)) in required_args.iter().enumerate() {
             let impl_generics = self.gen_all_generic(id);
             let ty_gen_in = self.gen_positional(id, false);
             let ty_gen_out = self.gen_positional(id, true);
@@ -322,7 +314,7 @@ impl GenericGenerator {
 
         let impl_generics = self.gen_all_generic(usize::MAX);
         let ty_gen = self.gen_positional(usize::MAX, false);
-        for (name, ty) in optional_args {
+        for (name, _ty) in optional_args {
             builders.append_all(quote! {
                 impl #impl_generics Validator #ty_gen {
                     #[allow(unused)]
