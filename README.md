@@ -1,6 +1,6 @@
 # OptArgs: Optional arguments for Rust functions
 
-Enable optional arguments for any function (or struct):
+Enable optional arguments for any function:
 
 ```rust
 #[optargs::optfn]
@@ -21,6 +21,25 @@ plot!(
     xlabel: "x axis", 
     ylabel: "y axis"
 );
+```
+
+...or struct:
+
+```rust
+pub struct Scatter {
+    x: Vec<i32>,
+    y: Option<Vec<i32>>,
+    title: Option<&str>,
+    xlabel: Option<&str>,
+    ylabel: Option<&str>,
+    legend: Option<bool>
+}
+impl Scatter {
+    fn plot(self) {/* custom impl that references self */}
+}
+
+// Call it
+Scatter!{ x: vec![1,2,3], y: vec![1,2,3] }.plot()
 ```
 
 This crate is especially useful for cleaning up builder-heavy codebases and making library APIs more ergonomic. It also integrates well with Rust-Analyzer and doesn't generate heavy compile times.
