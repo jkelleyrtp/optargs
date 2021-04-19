@@ -4,19 +4,18 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{quote, ToTokens, TokenStreamExt};
 use syn::{
     parse::{Parse, ParseStream},
-    Error, FnArg, GenericArgument, Ident, ItemFn, Path, PathArguments, Result, ReturnType, Type,
-    Visibility,
+    DeriveInput, Error, FnArg, GenericArgument, Ident, ItemFn, Path, PathArguments, Result,
+    ReturnType, Type, Visibility,
 };
 
 type BuilderField = (Ident, Box<Type>);
 
 pub struct OptStruct {
-    original: ItemFn,
+    name: Ident,
     required_args: Vec<BuilderField>,
     optional_args: Vec<BuilderField>,
-    vis: Visibility,
-    name: Ident,
-    return_type: ReturnType,
+    // vis: Visibility,
+    // return_type: ReturnType,
 }
 
 impl Parse for OptStruct {
@@ -31,61 +30,60 @@ impl Parse for OptStruct {
     */
 
     fn parse(input: ParseStream) -> Result<Self> {
-        let orig: ItemFn = input.parse()?;
+        let input: DeriveInput = input.parse()?;
 
-        // start by parsing positionals
-        // optionals must come after positionals
+        let data = match &input.data {
+            syn::Data::Struct(a) => Ok(a),
+            syn::Data::Enum(_) | syn::Data::Union(_) => Err(syn::Error::new(
+                input.ident.span(),
+                "Only structs can be created with the optional pattern.",
+            )),
+        }?;
+
+        let name = input.ident.clone();
+
         let mut parsing_optionals = false;
         let (mut required_args, mut optional_args) = (Vec::new(), Vec::new());
 
-        for arg in orig.sig.inputs.clone() {
-            match arg {
-                FnArg::Typed(arg) => Ok(arg),
-                FnArg::Receiver(r) => Err(Error::new_spanned(r, "optfn cannot be used on methods")),
-            }
-            .and_then(|f| match (&f).pat.as_ref() {
-                syn::Pat::Ident(iden) => Ok((iden.clone(), f)),
-                other => Err(Error::new_spanned(other, "optfn cannot struct fields")),
-            })
-            .map(|(name, pat)| {
-                let is_optional = match pat.ty.as_ref() {
-                    Type::Path(p) => {
-                        if let Some(arg) = p.path.segments.first() {
-                            arg.ident.to_string() == "Option"
-                        } else {
-                            false
-                        }
-                    }
-                    _ => false,
-                };
-                (name, pat, is_optional)
-            })
-            .and_then(|(name, pat, is_optional)| {
-                match (is_optional, parsing_optionals) {
-                    (false, false) => {
-                        required_args.push((name.ident, pat.ty));
-                        Ok(())
-                    }
-                    (false, true) => Err(Error::new_spanned(
-                        name,
-                        "Non-optional values must be placed before optionals",
-                    )),
-                    (true, _) => {
-                        optional_args.push((name.ident, extract_type_from_option(pat.ty)?));
-                        parsing_optionals = true;
-                        Ok(())
+        for field in &data.fields {
+            let syn::Field { ident, ty, .. } = field;
+
+            let ident = ident.clone().ok_or(Error::new_spanned(
+                &name,
+                "Non-optional values must be placed before optionals",
+            ))?;
+
+            // todo: allow attrs like #[default] to be placed on fields that don't have an obvious option
+            let is_optional = match ty {
+                Type::Path(p) => {
+                    if let Some(arg) = p.path.segments.first() {
+                        arg.ident.to_string() == "Option"
+                    } else {
+                        false
                     }
                 }
-            })?;
+                _ => false,
+            };
+
+            match (is_optional, parsing_optionals) {
+                (true, _) => {
+                    optional_args.push((ident.clone(), extract_type_from_option(ty)?.clone()));
+                    parsing_optionals = true;
+                }
+                (false, false) => required_args.push((ident.clone(), Box::new(ty.clone()))),
+                (false, true) => {
+                    return Err(Error::new_spanned(
+                        &name,
+                        "Non-optional values must be placed before optionals",
+                    ));
+                }
+            };
         }
 
         Ok(Self {
-            vis: orig.vis.clone(),
-            return_type: orig.sig.output.clone(),
-            name: orig.sig.ident.clone(),
-            original: orig,
-            required_args,
+            name,
             optional_args,
+            required_args,
         })
     }
 }
@@ -93,12 +91,12 @@ impl Parse for OptStruct {
 impl ToTokens for OptStruct {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
         let OptStruct {
-            original,
+            // original,
+            // vis,
+            // return_type,
             required_args,
             optional_args,
-            vis,
             name,
-            return_type,
             ..
         } = self;
 
@@ -128,11 +126,15 @@ impl ToTokens for OptStruct {
             .map(|f| (true, f))
             .chain(optional_args.iter().map(|f| (false, f)))
             .enumerate()
-            .map(|(id, (required, _))| {
+            .map(|(id, (required, (name, ty)))| {
                 let id = syn::Index::from(id);
                 match required {
-                    true => quote! {inners.#id.unwrap(),},
-                    false => quote! {inners.#id,},
+                    true => quote! {
+                        #name: inners.#id.unwrap(),
+                    },
+                    false => quote! {
+                        #name: inners.#id,
+                    },
                 }
             });
 
@@ -141,7 +143,6 @@ impl ToTokens for OptStruct {
 
         ToTokens::to_tokens(
             &quote! {
-                #original
 
                 #[doc(hidden)]
                 #[macro_export]
@@ -156,7 +157,10 @@ impl ToTokens for OptStruct {
                             #[allow(unused_mut)]
                             let mut validator = Validator::builder();
                             validator $(.$key())* .build();
-                            #name(#( #call_body )*)
+
+                            #name{
+                                #( #call_body )*
+                            }
                         }
                     };
                     #( #helper_defs )*
@@ -169,7 +173,7 @@ impl ToTokens for OptStruct {
 }
 
 // https://stackoverflow.com/questions/55271857/how-can-i-get-the-t-from-an-optiont-when-using-syn
-fn extract_type_from_option(ty: Box<Type>) -> Result<Box<Type>> {
+fn extract_type_from_option(ty: &Type) -> Result<Box<Type>> {
     // todo: allow other option types (probably generated by macro)
     fn path_is_option(path: &Path) -> bool {
         path.leading_colon.is_none()
@@ -177,7 +181,7 @@ fn extract_type_from_option(ty: Box<Type>) -> Result<Box<Type>> {
             && path.segments.iter().next().unwrap().ident == "Option"
     }
 
-    match ty.as_ref() {
+    match ty {
         Type::Path(typepath) if typepath.qself.is_none() && path_is_option(&typepath.path) => {
             // Get the first segment of the path (there is only one, in fact: "Option"):
 

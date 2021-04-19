@@ -1,13 +1,13 @@
 #![deny(deprecated)]
-use optargs_macro::masker;
+// use optargs_macro::masker;
 
 macro_rules! example {
     ( $($key:ident: $value:expr), *) => {{
         // forward the tokens into a helper proc macro
         // this circumvents hygeneie and lets us abuse idents
-        masker!{
-            { $( let $key = Some($value); )* }
-        }
+        // masker!{
+        //     { $( let $key = Some($value); )* }
+        // }
     }};
 }
 
