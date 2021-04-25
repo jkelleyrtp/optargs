@@ -101,10 +101,10 @@ impl ToTokens for OptFn {
                 let id = syn::Index::from(id);
                 quote! {
                     (@setter_helper $src:ident #arg $key:ident) => {
-                        $src.#id = Some($key);
+                        $src.#id = ::core::option::Option::Some($key);
                     };
                     (@setter_helper $src:ident #arg $key:ident $value:expr) => {
-                        $src.#id = Some($value);
+                        $src.#id = ::core::option::Option::Some($value);
                     };
                 }
             });
@@ -112,23 +112,28 @@ impl ToTokens for OptFn {
         let inners_body = required_args
             .iter()
             .chain(optional_args.iter())
-            .map(|_| quote! {None,});
+            .map(|_| quote! {::core::option::Option::None,});
 
         let call_body = required_args
             .iter()
             .map(|f| (true, f))
             .chain(optional_args.iter().map(|f| (false, f)))
             .enumerate()
-            .map(|(id, (required, _))| {
+            .map(|(id, (required, (_, ty)))| {
                 let id = syn::Index::from(id);
                 match required {
-                    true => quote! {inners.#id.unwrap(),},
-                    false => quote! {inners.#id,},
+                    true => quote! {inners.#id.unwrap() as #ty,},
+                    false => quote! { inners.#id, },
                 }
             });
 
         let validator =
             GenericGenerator::new(required_args.len()).generate(required_args, optional_args);
+
+        let ty_expanse = required_args
+            .iter()
+            .chain(optional_args.iter())
+            .map(|(_, ty)| quote! { ::core::option::Option<#ty>, });
 
         ToTokens::to_tokens(
             &quote! {
@@ -140,7 +145,7 @@ impl ToTokens for OptFn {
                     ($($key:ident $(: $value:expr)? ), * $(,)?) => {
                         {
                             #[allow(unused_mut)]
-                            let mut inners = (#( #inners_body )*);
+                            let mut inners: (#( #ty_expanse)*) = (#( #inners_body )*);
                             { $( #name! (@setter_helper inners $key $key $($value)? ); )* }
                             #validator
 

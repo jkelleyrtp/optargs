@@ -12,7 +12,7 @@ macro_rules! example_src {
     ($($key:ident $(: $value:expr)? ), *) => {
         {
             #[allow(unused_mut)]
-            let mut inners = (None, None);
+            let mut inners: (Option<i32>, Option<&str>) = (None, None);
             { $( example_src!(@setter_helper inners $key $key $($value)? ); )* }
 
             // Validate
@@ -49,6 +49,7 @@ fn main() {
     example!(a: 10, b: "asd");
 
     example_src!(a: 10, b: "asd");
+    example_src!(a: 10);
 
     let a = 10;
     example!(a);
