@@ -8,12 +8,16 @@ use syn::{DeriveInput, Error, GenericArgument, Ident, Path, PathArguments, Resul
 type BuilderField = (Ident, Box<Type>);
 
 pub struct OptStruct {
-    name: Ident,
-    required_args: Vec<BuilderField>,
-    optional_args: Vec<BuilderField>,
+    conf: OptStructConf,
 }
 
-impl Parse for OptStruct {
+pub(crate) struct OptStructConf {
+    pub(crate) name: Ident,
+    pub(crate) required_args: Vec<BuilderField>,
+    pub(crate) optional_args: Vec<BuilderField>,
+}
+
+impl OptStructConf {
     /*
 
     We care about:
@@ -24,7 +28,7 @@ impl Parse for OptStruct {
     - fields that are optional
     */
 
-    fn parse(input: ParseStream) -> Result<Self> {
+    pub(crate) fn parse(input: ParseStream) -> Result<Self> {
         let input: DeriveInput = input.parse()?;
 
         let data = match &input.data {
@@ -83,9 +87,17 @@ impl Parse for OptStruct {
     }
 }
 
-impl ToTokens for OptStruct {
-    fn to_tokens(&self, tokens: &mut TokenStream2) {
-        let OptStruct {
+impl OptStructConf {
+    pub(crate) fn prepare_generate_tokens(
+        &self,
+    ) -> (
+        &Ident,
+        impl Iterator<Item = TokenStream2> + '_,
+        impl Iterator<Item = TokenStream2> + '_,
+        impl Iterator<Item = TokenStream2> + '_,
+        TokenStream2,
+    ) {
+        let OptStructConf {
             required_args,
             optional_args,
             name,
@@ -132,6 +144,20 @@ impl ToTokens for OptStruct {
 
         let validator =
             GenericGenerator::new(required_args.len()).generate(required_args, optional_args);
+
+        (name, helper_defs, inners_body, call_body, validator)
+    }
+}
+
+impl Parse for OptStruct {
+    fn parse(input: ParseStream) -> Result<Self> {
+        OptStructConf::parse(input).map(|conf| Self { conf })
+    }
+}
+
+impl ToTokens for OptStruct {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        let (name, helper_defs, inners_body, call_body, validator) = OptStructConf::prepare_generate_tokens(&self.conf);
 
         ToTokens::to_tokens(
             &quote! {

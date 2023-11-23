@@ -50,3 +50,26 @@ pub use optargs_macro::optfn;
 /// };
 /// ```
 pub use optargs_macro::OptStruct;
+
+/// Flexible struct builder with optional arguments. Wrapped in an `std::sync::Arc`
+/// Derive OptStruct for your structs and then call the Struct's name as a macro to build it with an `std::sync::Arc` wrapper applied, eliding optionals.
+///
+/// Note that this still obeys traditional macro_rules, so you can only use the macro *after* declaration or import it from "crate".
+///
+/// ```rust
+/// #[derive(optargs::OptStructArc)]
+/// pub struct Scatter {
+///     x: Vec<i32>,
+///     y: Option<Vec<i32>>,
+///     title: Option<&str>,
+///     xlabel: Option<&str>,
+///     ylabel: Option<&str>,
+///     legend: Option<bool>
+/// }
+///
+/// let plot = Scatter!{
+///     x: vec![1,2,3],
+///     legend: true
+/// };
+/// `
+pub use optargs_macro::OptStructArc;
